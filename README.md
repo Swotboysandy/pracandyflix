@@ -1,38 +1,35 @@
 # PracandyFlix
 
-PracandyFlix is a **Netflix-inspired WebView app** built using Flutter and WebView for seamless streaming. It features a **dark premium UI**, **Lottie animation for loading**, **fullscreen video support**, and **secure domain whitelisting**.
+PracandyFlix is a WebView-based streaming browser built with Kotlin in Android Studio. It features a sleek, Netflix-inspired UI and provides a smooth viewing experience with support for fullscreen video, Lottie animations, and secure domain filtering.
 
 ## Features
-- 🌙 **Dark premium UI** with sleek design.
-- 🎥 **Full-screen video support** for immersive viewing.
-- 🚀 **Lottie animation loading** for a smooth user experience.
-- 🔒 **Domain whitelisting** for safer browsing.
-- 🔄 **Refresh button** for quick page reloads.
-- 📂 **File upload support** for web-based file interactions.
+- **WebView Streaming**: Browse and stream content seamlessly.
+- **Lottie Loading Animation**: Replaces the default loading bar with a smooth animation.
+- **Fullscreen Video Support**: Enables a true immersive viewing experience.
+- **Domain Filtering**: Blocks unwanted or unauthorized URLs for a safer experience.
+- **File Upload Support**: Allows users to upload files through the WebView.
+- **Refresh Button**: Easily reload pages with a floating refresh button.
 
 ## Installation
 1. Clone the repository:
-   ```sh
+   ```bash
    git clone https://github.com/yourusername/pracandyflix.git
    ```
-2. Open the project in **Android Studio**.
-3. Build and run the app on an Android device or emulator.
+2. Open the project in Android Studio.
+3. Build and run on an Android device or emulator.
 
-## How It Works
-- The app loads a **predefined set of streaming websites** securely within WebView.
-- It **blocks unapproved domains** to enhance safety.
-- Includes **Lottie animations** for a stylish loading effect.
-- Supports **full-screen video playback** inside the WebView.
-- **Progress bar & animations** improve the user experience.
-
-## Requirements
-- **Android Studio** installed
-- **Flutter SDK** setup
-- A **real device or emulator** for testing
-
-## Contributing
-Feel free to contribute! Fork the repo, make your changes, and submit a pull request. 😊
+## Usage
+- Open the app and navigate to your desired content.
+- Use the refresh button for quick page reloads.
+- Enjoy fullscreen videos with automatic landscape mode.
+- Secure browsing with domain-based URL filtering.
 
 ## License
-MIT License. See `LICENSE` for details.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Contributing
+Pull requests are welcome! For major changes, please open an issue first to discuss what you would like to improve.
+
+---
+Developed with ❤️ using Kotlin and Android Studio.
 
