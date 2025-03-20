@@ -1,10 +1,15 @@
 package com.example.pracandyflix
 
 import android.annotation.SuppressLint
+import android.app.AlertDialog
 import android.content.pm.ActivityInfo
+import android.graphics.Bitmap
 import android.net.Uri
+import android.net.http.SslError
 import android.os.Bundle
+import android.os.Message
 import android.view.Gravity
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.webkit.*
@@ -12,7 +17,6 @@ import android.widget.Button
 import android.widget.FrameLayout
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.view.setPadding
 import com.airbnb.lottie.LottieAnimationView
 import com.airbnb.lottie.LottieDrawable
 
@@ -37,26 +41,27 @@ class MainActivity : AppCompatActivity() {
             fileUploadCallback = null
         }
 
-    // Allowed domains (all others will be blocked)
+    // Allowed domains (only these domains are allowed)
     private val allowedDomains = listOf(
         "popcornmovies.to",
         "www.popcornmovies.to",
         "popembed.net",
         "solace.popcornmovies.workers.dev",
         "vidlink.pro",
+        "static.cloudflareinsights.com",
         "videasy.net",
         "vidsrc.me",
+        "harbor.popcornmovies.workers.dev",
         "mc.yandex.ru",
         "vidsrc.pro",
+        "intellipopup.com",
         "2embed.cc",
         "cdn.jwplayer.com",
         "multiembed.mov",
-        "lvtuucmyfpz.com",
         "megacloud.store",
         "frostywinds73.pro",
         "vidlvod.store",
         "image.tmdb.org",
-        "cdn.jwplayer.com",
         "proxier.vidlink.pro",
         "macdn.hakunaymatata.com"
     )
@@ -65,7 +70,7 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Initialize WebView
+        // 1) Setup the WebView
         webView = WebView(this).apply {
             settings.apply {
                 javaScriptEnabled = true
@@ -74,26 +79,133 @@ class MainActivity : AppCompatActivity() {
                 javaScriptCanOpenWindowsAutomatically = false
                 cacheMode = WebSettings.LOAD_DEFAULT
                 databaseEnabled = true
-                mediaPlaybackRequiresUserGesture = false
+                mediaPlaybackRequiresUserGesture = false  // Allow video autoplay
                 mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
                 loadsImagesAutomatically = true
+                safeBrowsingEnabled = true
+
+                // Security: disable file access
+                allowFileAccess = false
+                allowContentAccess = false
+                allowFileAccessFromFileURLs = false
+                allowUniversalAccessFromFileURLs = false
             }
-            // Block URLs not in allowed domains
+
+            // Single-tap fix (prevents needing double-tap)
+            requestFocusFromTouch()
+            setOnTouchListener { v, event ->
+                v.onTouchEvent(event)
+                false
+            }
+
             webViewClient = object : WebViewClient() {
-                override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
-                    val url = request?.url.toString()
-                    return !isAllowedDomain(url)
+                override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
+                    super.onPageStarted(view, url, favicon)
+                    // Show loading animation when a page starts loading.
+                    lottieAnimationView.visibility = View.VISIBLE
                 }
-                override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): WebResourceResponse? {
-                    val url = request?.url.toString()
-                    if (!isAllowedDomain(url)) {
-                        return WebResourceResponse("text/plain", "utf-8", null)
+
+                override fun onPageFinished(view: WebView?, url: String?) {
+                    super.onPageFinished(view, url)
+                    lottieAnimationView.visibility = View.GONE
+
+                    // If the URL is allowed, inject JS to hide the logo & login, and enable PiP button
+                    if (url != null && isAllowedDomain(url)) {
+                        view?.evaluateJavascript(
+                            """
+                            (function() {
+                                try {
+                                    // --- Hide Logo ---
+                                    // The site uses this container for the main logo:
+                                    // <div class="shrink-0 lg:ml-0 flex items-center gap-x-5">
+                                    // We remove just the anchor with the <img>, so the nav/hamburger stays.
+                                    var logoLink = document.querySelector('div.shrink-0.lg\\:ml-0.flex.items-center.gap-x-5 a[href="https://www.popcornmovies.to/home"]');
+                                    if (logoLink) {
+                                        logoLink.remove();
+                                    }
+                                    
+                                    // --- Hide "Sign in" / "Sign up" ---
+                                    // Remove links to /login or /register
+                                    var loginLinks = document.querySelectorAll('a[href*="/login"], a[href*="/register"]');
+                                    loginLinks.forEach(function(link) {
+                                        link.remove();
+                                    });
+
+                                    // --- Enable PiP Button (class="vds-pip-button") ---
+                                    // If the user clicks the PiP button, request Picture-in-Picture on the first <video> found.
+                                    // This only works if the device & WebView support PiP.
+                                    if ('pictureInPictureEnabled' in document) {
+                                        var pipButtons = document.querySelectorAll('.vds-pip-button');
+                                        pipButtons.forEach(function(btn) {
+                                            btn.addEventListener('click', function(e) {
+                                                e.preventDefault();
+                                                var video = document.querySelector('video');
+                                                if (video && document.pictureInPictureEnabled) {
+                                                    video.requestPictureInPicture()
+                                                        .catch(err => console.error('PiP error:', err));
+                                                }
+                                            });
+                                        });
+                                    }
+                                } catch (e) {
+                                    console.error('Error in injected script:', e);
+                                }
+                            })();
+                            """.trimIndent(),
+                            null
+                        )
                     }
-                    return super.shouldInterceptRequest(view, request)
+                }
+
+                override fun onReceivedError(
+                    view: WebView?,
+                    request: WebResourceRequest?,
+                    error: WebResourceError?
+                ) {
+                    super.onReceivedError(view, request, error)
+                    // Optionally handle errors.
+                }
+
+                override fun onReceivedSslError(
+                    view: WebView?,
+                    handler: SslErrorHandler?,
+                    error: SslError?
+                ) {
+                    super.onReceivedSslError(view, handler, error)
+                    // Optionally handle SSL errors.
+                }
+
+                // Block navigation to disallowed domains.
+                override fun shouldOverrideUrlLoading(
+                    view: WebView?,
+                    request: WebResourceRequest?
+                ): Boolean {
+                    val url = request?.url.toString()
+                    return if (!isAllowedDomain(url)) {
+                        // Block navigation if domain is not allowed.
+                        true
+                    } else {
+                        false
+                    }
                 }
             }
-            // Handle fullscreen, file uploads, and progress
+
             webChromeClient = object : WebChromeClient() {
+                override fun onProgressChanged(view: WebView?, newProgress: Int) {
+                    super.onProgressChanged(view, newProgress)
+                }
+
+                override fun onCreateWindow(
+                    view: WebView?,
+                    isDialog: Boolean,
+                    isUserGesture: Boolean,
+                    resultMsg: Message?
+                ): Boolean {
+                    // Block creation of new windows/popups
+                    return true
+                }
+
+                // Fullscreen video support
                 override fun onShowCustomView(view: View?, callback: CustomViewCallback?) {
                     if (customView != null) {
                         callback?.onCustomViewHidden()
@@ -101,48 +213,24 @@ class MainActivity : AppCompatActivity() {
                     }
                     customView = view
                     customViewCallback = callback
-
-                    // Hide system UI for fullscreen mode
-                    window.decorView.systemUiVisibility = (
-                            View.SYSTEM_UI_FLAG_FULLSCREEN
-                                    or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
-                                    or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
-                            )
-
                     fullscreenContainer.addView(
                         view,
                         ViewGroup.LayoutParams.MATCH_PARENT,
                         ViewGroup.LayoutParams.MATCH_PARENT
                     )
                     setContentView(fullscreenContainer)
-
-                    // Force landscape mode for better experience
                     requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
                 }
 
                 override fun onHideCustomView() {
-                    customView?.let {
-                        fullscreenContainer.removeView(it)
-                        customView = null
-                    }
+                    customView?.let { fullscreenContainer.removeView(it) }
+                    customView = null
                     customViewCallback?.onCustomViewHidden()
-
-                    // Restore system UI when exiting fullscreen
-                    window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_VISIBLE
-
                     setContentView(rootLayout)
                     requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
                 }
 
-                override fun onProgressChanged(view: WebView?, newProgress: Int) {
-                    // Hide Lottie animation when the page is fully loaded
-                    if (newProgress == 100) {
-                        lottieAnimationView.visibility = View.GONE
-                    } else {
-                        lottieAnimationView.visibility = View.VISIBLE
-                    }
-                }
-
+                // Handle file uploads (choosing files)
                 override fun onShowFileChooser(
                     webView: WebView?,
                     filePathCallback: ValueCallback<Array<Uri>>?,
@@ -159,54 +247,12 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // Load or restore URL
-        if (savedInstanceState == null) {
-            webView.loadUrl("https://www.popcornmovies.to/home")
-        } else {
-            webView.restoreState(savedInstanceState)
-        }
-
-
-        webView.webViewClient = object : WebViewClient() {
-            override fun onPageFinished(view: WebView?, url: String?) {
-                super.onPageFinished(view, url)
-                webView.evaluateJavascript(
-                    """
-            (function() {
-                // Hide the logo
-                var logo = document.querySelector('.shrink-0.lg\\:ml-0.flex.items-center.gap-x-5');
-                if (logo) {
-                    logo.remove();
-                }
-                
-                // Hide all login buttons
-                var loginButtons = document.querySelectorAll('a[href="https://www.popcornmovies.to/login"]');
-                loginButtons.forEach(function(btn) {
-                    btn.remove();
-                });
-
-                // Hide mobile login <li> container if it still exists
-                var mobileLogin = document.querySelector('li.block.lg\\:hidden');
-                if (mobileLogin) {
-                    mobileLogin.remove();
-                }
-            })();
-            """.trimIndent(), null
-                )
-            }
-        }
-
-
-
-
-
-
-        // Initialize Fullscreen container
+        // 2) Container for fullscreen video
         fullscreenContainer = FrameLayout(this)
 
-        // Initialize LottieAnimationView for loading animation
+        // 3) Lottie loading animation
         lottieAnimationView = LottieAnimationView(this).apply {
-            setAnimation("lottie_loading.json") // Ensure this file exists in assets/
+            setAnimation("lottie_loading.json") // Put this in app/src/main/assets/
             repeatCount = LottieDrawable.INFINITE
             playAnimation()
             layoutParams = FrameLayout.LayoutParams(
@@ -216,51 +262,63 @@ class MainActivity : AppCompatActivity() {
             )
         }
 
-        // Create the root layout (holds WebView, Lottie animation, Refresh Button)
-        rootLayout = createMainLayout()
+        // 4) Root layout with WebView, loading animation, refresh button
+        rootLayout = FrameLayout(this).apply {
+            // WebView in background
+            addView(
+                webView,
+                FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT
+                )
+            )
+            // Loading animation on top
+            addView(lottieAnimationView)
+            // Refresh button (emoji)
+            val refreshButton = Button(this@MainActivity).apply {
+                text = "🔄"
+                textSize = 20f
+                setOnClickListener { webView.reload() }
+            }
+            addView(
+                refreshButton,
+                FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    gravity = Gravity.BOTTOM or Gravity.END
+                    marginEnd = 40
+                    bottomMargin = 40
+                }
+            )
+        }
 
-        // Set the content view to the root layout
+        // 5) Load or restore the WebView state
+        if (savedInstanceState == null) {
+            webView.loadUrl("https://www.popcornmovies.to/home")
+        } else {
+            webView.restoreState(savedInstanceState)
+        }
+
         setContentView(rootLayout)
     }
 
-    // Create main layout with overlays
-    private fun createMainLayout(): FrameLayout {
-        return FrameLayout(this).apply {
-            // 1. Add the WebView
-            addView(webView, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
-            // 2. Add the Lottie animation (centered)
-            addView(lottieAnimationView)
-            // 3. Add a Refresh Button overlay at bottom-right
-            val refreshButton = Button(this@MainActivity).apply {
-                text = "⟳" // Use an icon if preferred
-                textSize = 20f
-                setPadding(20)
-                setOnClickListener {
-                    webView.reload()
-                }
-            }
-            val btnParams = FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.WRAP_CONTENT,
-                FrameLayout.LayoutParams.WRAP_CONTENT
-            ).apply {
-                gravity = Gravity.BOTTOM or Gravity.END
-                marginEnd = 40
-                bottomMargin = 40
-            }
-            addView(refreshButton, btnParams)
-        }
-    }
-
     override fun onBackPressed() {
-        // If in fullscreen, exit fullscreen instead of closing the app
+        // If in fullscreen mode, exit fullscreen
         if (customView != null) {
             (webView.webChromeClient as? WebChromeClient)?.onHideCustomView()
             return
         }
+        // Otherwise, go back or confirm exit
         if (webView.canGoBack()) {
             webView.goBack()
         } else {
-            super.onBackPressed()
+            AlertDialog.Builder(this)
+                .setTitle("Exit App")
+                .setMessage("Are you sure you want to exit?")
+                .setPositiveButton("Yes") { _, _ -> super.onBackPressed() }
+                .setNegativeButton("No", null)
+                .show()
         }
     }
 
@@ -269,10 +327,26 @@ class MainActivity : AppCompatActivity() {
         webView.saveState(outState)
     }
 
-    // Check if URL is allowed (must contain one of the allowed domains)
+    override fun onRestoreInstanceState(savedInstanceState: Bundle) {
+        super.onRestoreInstanceState(savedInstanceState)
+        webView.restoreState(savedInstanceState)
+    }
+
+    /**
+     * Check if a given URL belongs to one of the allowed domains.
+     */
     private fun isAllowedDomain(url: String): Boolean {
-        return allowedDomains.any { domain ->
-            url.contains(domain, ignoreCase = true)
+        return try {
+            val host = Uri.parse(url).host?.lowercase() ?: return false
+            allowedDomains.any { domain ->
+                if (domain.startsWith("www.")) {
+                    host == domain.lowercase()
+                } else {
+                    host == domain.lowercase() || host == "www.${domain.lowercase()}"
+                }
+            }
+        } catch (e: Exception) {
+            false
         }
     }
 }
