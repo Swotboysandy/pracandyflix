@@ -42,16 +42,23 @@ class MainActivity : AppCompatActivity() {
         "popcornmovies.to",
         "www.popcornmovies.to",
         "popembed.net",
+        "solace.popcornmovies.workers.dev",
         "vidlink.pro",
         "videasy.net",
         "vidsrc.me",
+        "mc.yandex.ru",
         "vidsrc.pro",
         "2embed.cc",
+        "cdn.jwplayer.com",
         "multiembed.mov",
+        "lvtuucmyfpz.com",
         "megacloud.store",
         "frostywinds73.pro",
         "vidlvod.store",
-        "image.tmdb.org"
+        "image.tmdb.org",
+        "cdn.jwplayer.com",
+        "proxier.vidlink.pro",
+        "macdn.hakunaymatata.com"
     )
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -94,23 +101,39 @@ class MainActivity : AppCompatActivity() {
                     }
                     customView = view
                     customViewCallback = callback
+
+                    // Hide system UI for fullscreen mode
+                    window.decorView.systemUiVisibility = (
+                            View.SYSTEM_UI_FLAG_FULLSCREEN
+                                    or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                                    or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                            )
+
                     fullscreenContainer.addView(
                         view,
                         ViewGroup.LayoutParams.MATCH_PARENT,
                         ViewGroup.LayoutParams.MATCH_PARENT
                     )
                     setContentView(fullscreenContainer)
+
+                    // Force landscape mode for better experience
                     requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
                 }
+
                 override fun onHideCustomView() {
                     customView?.let {
                         fullscreenContainer.removeView(it)
                         customView = null
                     }
                     customViewCallback?.onCustomViewHidden()
+
+                    // Restore system UI when exiting fullscreen
+                    window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_VISIBLE
+
                     setContentView(rootLayout)
                     requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
                 }
+
                 override fun onProgressChanged(view: WebView?, newProgress: Int) {
                     // Hide Lottie animation when the page is fully loaded
                     if (newProgress == 100) {
@@ -119,6 +142,7 @@ class MainActivity : AppCompatActivity() {
                         lottieAnimationView.visibility = View.VISIBLE
                     }
                 }
+
                 override fun onShowFileChooser(
                     webView: WebView?,
                     filePathCallback: ValueCallback<Array<Uri>>?,
@@ -141,6 +165,41 @@ class MainActivity : AppCompatActivity() {
         } else {
             webView.restoreState(savedInstanceState)
         }
+
+
+        webView.webViewClient = object : WebViewClient() {
+            override fun onPageFinished(view: WebView?, url: String?) {
+                super.onPageFinished(view, url)
+                webView.evaluateJavascript(
+                    """
+            (function() {
+                // Hide the logo
+                var logo = document.querySelector('.shrink-0.lg\\:ml-0.flex.items-center.gap-x-5');
+                if (logo) {
+                    logo.remove();
+                }
+                
+                // Hide all login buttons
+                var loginButtons = document.querySelectorAll('a[href="https://www.popcornmovies.to/login"]');
+                loginButtons.forEach(function(btn) {
+                    btn.remove();
+                });
+
+                // Hide mobile login <li> container if it still exists
+                var mobileLogin = document.querySelector('li.block.lg\\:hidden');
+                if (mobileLogin) {
+                    mobileLogin.remove();
+                }
+            })();
+            """.trimIndent(), null
+                )
+            }
+        }
+
+
+
+
+
 
         // Initialize Fullscreen container
         fullscreenContainer = FrameLayout(this)
