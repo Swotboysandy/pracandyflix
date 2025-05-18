@@ -13,7 +13,7 @@ PracandyFlix is a WebView-based streaming browser built with Kotlin in Android S
 ## Installation
 1. Clone the repository:
    ```bash
-   git clone https://github.com/yourusername/pracandyflix.git
+   git clone https://github.com/swotboysandy/pracandyflix.git
    ```
 2. Open the project in Android Studio.
 3. Build and run on an Android device or emulator.
